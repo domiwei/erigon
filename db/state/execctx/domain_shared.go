@@ -103,7 +103,7 @@ func NewSharedDomains(ctx context.Context, tx kv.TemporalTx, logger log.Logger) 
 	sd := &SharedDomains{
 		logger: logger,
 		//trace:   true,
-		metrics:  changeset.DomainMetrics{Domains: map[kv.Domain]*changeset.DomainIOMetrics{}},
+		metrics:  changeset.DomainMetrics{},
 		stepSize: tx.Debug().StepSize(),
 	}
 
@@ -285,6 +285,9 @@ func (sd *SharedDomains) Logger() log.Logger { return sd.logger }
 
 // SetStateCache sets the state cache for faster lookups.
 func (sd *SharedDomains) SetStateCache(stateCache *cache.StateCache) {
+	if !dbg.UseStateCache || stateCache == nil {
+		return
+	}
 	sd.stateCache = stateCache
 }
 
@@ -303,8 +306,6 @@ func (sd *SharedDomains) ClearRam(resetCommitment bool) {
 func (sd *SharedDomains) Size() uint64 {
 	return sd.mem.SizeEstimate()
 }
-
-const CodeSizeTableFake = "CodeSize"
 
 func (sd *SharedDomains) IndexAdd(table kv.InvertedIdx, key []byte, txNum uint64) (err error) {
 	return sd.mem.IndexAdd(table, key, txNum)
@@ -451,7 +452,11 @@ func (sd *SharedDomains) DomainLogMetrics() map[kv.Domain][]any {
 	sd.metrics.RLock()
 	defer sd.metrics.RUnlock()
 
-	for domain, dm := range sd.metrics.Domains {
+	for i, dm := range sd.metrics.Domains {
+		if dm == nil {
+			continue
+		}
+		domain := kv.Domain(i)
 		var metrics []any
 
 		if readCount := dm.CacheReadCount; readCount > 0 {

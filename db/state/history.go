@@ -117,12 +117,6 @@ func (h *History) vAccessorNewFilePath(fromStep, toStep kv.Step) string {
 func (h *History) vFileNameMask(fromStep, toStep kv.Step) string {
 	return fmt.Sprintf("*-%s.%d-%d.v", h.FilenameBase, fromStep, toStep)
 }
-func (h *History) vFilePathMask(fromStep, toStep kv.Step) string {
-	return filepath.Join(h.dirs.SnapHistory, h.vFileNameMask(fromStep, toStep))
-}
-func (h *History) vAccessorFilePathMask(fromStep, toStep kv.Step) string {
-	return filepath.Join(h.dirs.SnapAccessors, h.vAccessorFileNameMask(fromStep, toStep))
-}
 func (h *History) vAccessorFileNameMask(fromStep, toStep kv.Step) string {
 	return fmt.Sprintf("*-%s.%d-%d.vi", h.FilenameBase, fromStep, toStep)
 }
@@ -885,7 +879,7 @@ func (h *History) dataWriter(ctx context.Context, f *seg.Compressor) *seg.PagedW
 	if !strings.Contains(f.FileName(), ".v") {
 		panic("assert: miss-use " + f.FileName())
 	}
-	return seg.NewPagedWriter(ctx, seg.NewWriter(f, h.Compression), f.GetValuesOnCompressedPage() > 0)
+	return seg.NewPagedWriter(ctx, seg.NewWriter(f, h.Compression), f.GetValuesOnCompressedPage() > 0, h.CompressorCfg.Workers)
 }
 func (ht *HistoryRoTx) dataReader(f *seg.Decompressor) *seg.Reader { return ht.h.dataReader(f) }
 func (ht *HistoryRoTx) dataWriter(ctx context.Context, f *seg.Compressor) *seg.PagedWriter {
@@ -1016,10 +1010,6 @@ func (ht *HistoryRoTx) canHashPruneUntil(tx kv.Tx, untilTx uint64) (can bool, tx
 
 func (ht *HistoryRoTx) canPruneUntil(tx kv.Tx, untilTx uint64) (can bool, txTo uint64) {
 	minIdxTx, maxIdxTx := ht.iit.ii.minTxNumInDB(tx), ht.iit.ii.maxTxNumInDB(tx)
-	//defer func() {
-	//	fmt.Printf("CanPrune[%s]Until(%d) noFiles=%t txTo %d idxTx [%d-%d] keepRecentTxInDB=%d; result %t\n",
-	//		ht.h.filenameBase, untilTx, ht.h.dontProduceHistoryFiles, txTo, minIdxTx, maxIdxTx, ht.h.keepRecentTxInDB, minIdxTx < txTo)
-	//}()
 
 	stat, err := GetPruneValProgress(tx, []byte(ht.h.ValuesTable))
 	if err != nil {
@@ -1056,7 +1046,7 @@ func (ht *HistoryRoTx) canPruneUntil(tx kv.Tx, untilTx uint64) (can bool, txTo u
 	case "commitment":
 		mxPrunableHComm.Set(delta)
 	}
-	//println("in history", ht.h.FilenameBase, stat.KeyProgress.String(), stat.ValueProgress.String(), stat.TxTo, txTo, minTxDB)
+
 	return minIdxTx < txTo || pruneInProgress, txTo
 }
 
@@ -1131,63 +1121,7 @@ func (ht *HistoryRoTx) prune(ctx context.Context, rwTx kv.RwTx, txFrom, txTo, li
 //   - E.g. Unwind can't use progress, because it's not linear
 //     and will wrongly update progress of steps cleaning and could end up with inconsistent history.
 func (ht *HistoryRoTx) OldPrune(ctx context.Context, tx kv.RwTx, txFrom, txTo, limit uint64, forced bool, logEvery *time.Ticker) (*InvertedIndexPruneStat, error) {
-	if !forced {
-		if ht.files.EndTxNum() > 0 {
-			txTo = min(txTo, ht.files.EndTxNum())
-		}
-		var can bool
-		can, txTo = ht.canHashPruneUntil(tx, txTo)
-		if !can {
-			return nil, nil
-		}
-	}
-	return ht.oldPrune(ctx, tx, txFrom, txTo, limit, forced, logEvery)
-}
-
-func (ht *HistoryRoTx) oldPrune(ctx context.Context, rwTx kv.RwTx, txFrom, txTo, limit uint64, forced bool, logEvery *time.Ticker) (*InvertedIndexPruneStat, error) {
-	//fmt.Printf(" pruneH[%s] %t, %d-%d\n", ht.h.filenameBase, ht.CanPruneUntil(rwTx), txFrom, txTo)
-	defer func(t time.Time) { mxPruneTookHistory.ObserveDuration(t) }(time.Now())
-
-	var (
-		//	seek     = make([]byte, 8, 256)
-		valsCDup kv.RwCursorDupSort
-		valsC    kv.RwCursor
-		valsCP   kv.PseudoDupSortRwCursor
-		err      error
-		mode     prune.StorageMode
-	)
-
-	if !ht.h.HistoryLargeValues {
-		valsCDup, err = rwTx.RwCursorDupSort(ht.h.ValuesTable)
-		if err != nil {
-			return nil, err
-		}
-		defer valsCDup.Close()
-		valsCP = valsCDup
-		mode = prune.PrefixValStorageMode
-	} else {
-		valsC, err = rwTx.RwCursor(ht.h.ValuesTable)
-		if err != nil {
-			return nil, err
-		}
-		defer valsC.Close()
-		mode = prune.KeyStorageMode
-
-		switch c := valsC.(type) {
-		case *mdbx2.MdbxCursor:
-			valsCP = &mdbx2.MdbxCursorPseudoDupSort{MdbxCursor: c}
-		case *mdbx2.MdbxDupSortCursor:
-			valsCP = valsC.(*mdbx2.MdbxDupSortCursor)
-		default:
-			return nil, fmt.Errorf("unexpected cursor type %T for table %s", valsC, ht.h.ValuesTable)
-		}
-	}
-
-	if !forced && ht.h.SnapshotsDisabled {
-		forced = true // or index.CanPrune will return false cuz no snapshots made
-	}
-
-	return ht.iit.HashSeekingPrune(ctx, rwTx, txFrom, txTo, limit, logEvery, forced, valsCP, mxPruneSizeHistory, mode)
+	return ht.Prune(ctx, tx, txFrom, txTo, limit, forced, logEvery)
 }
 
 func (ht *HistoryRoTx) Close() {
@@ -1217,14 +1151,6 @@ func (ht *HistoryRoTx) Close() {
 	ht.iit.Close()
 }
 
-func (ht *HistoryRoTx) getFileDeprecated(from, to uint64) (it visibleFile, ok bool) {
-	for i := 0; i < len(ht.files); i++ {
-		if ht.files[i].startTxNum == from && ht.files[i].endTxNum == to {
-			return ht.files[i], true
-		}
-	}
-	return it, false
-}
 func (ht *HistoryRoTx) getFile(txNum uint64) (it visibleFile, ok bool) {
 	for i := 0; i < len(ht.files); i++ {
 		if ht.files[i].startTxNum <= txNum && ht.files[i].endTxNum > txNum {
