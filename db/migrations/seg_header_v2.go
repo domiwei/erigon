@@ -250,7 +250,7 @@ var segCompressionAtV2 = map[string]seg.FileCompression{
 // on large snapshot sets, while still exercising the decompression path.
 const smokeTestMaxWords = 2_000
 
-func smokeTestSegFile(path string, logger log.Logger) error {
+func smokeTestSegFile(path string, logger log.Logger) (retErr error) {
 	dec, err := seg.NewDecompressor(path)
 	if err != nil {
 		return fmt.Errorf("error creating decompressor: %v, %s", err, path)
@@ -260,6 +260,13 @@ func smokeTestSegFile(path string, logger log.Logger) error {
 	if dec.CompressionFormatVersion() < seg.FileCompressionFormatV2 {
 		return nil // not upgraded (V0), skip
 	}
+
+	fc, _ := dec.WordLevelCompression()
+	defer func() {
+		if rec := recover(); rec != nil {
+			retErr = fmt.Errorf("smoke-test panic (wrong bitmask?): %v, file=%s, compression=%v", rec, path, fc)
+		}
+	}()
 
 	logger.Debug("[seg_header_v2] smoke-test", "file", filepath.Base(path))
 	g := dec.MakeGetter()
