@@ -108,16 +108,19 @@ func updateCanonicalChainInTheDatabase(ctx context.Context, tx kv.RwTx, headSlot
 	}
 
 	oldCanonical := common.Hash{}
-	// Guard against uint64 underflow: currentSlot=0 → currentSlot-1 = MaxUint64 → infinite loop.
+	oldCanonicalSlot := uint64(0)
 	for i := currentSlot; i > 1; i-- {
 		oldCanonical, err = beacon_indicies.ReadCanonicalBlockRoot(tx, i-1)
 		if err != nil {
 			return fmt.Errorf("failed to read canonical block root: %w", err)
 		}
 		if oldCanonical != (common.Hash{}) {
+			oldCanonicalSlot = i - 1
 			break
 		}
 	}
+
+	initialCanonical := currentCanonical
 
 	// List of new canonical chain entries
 	reconnectionRoots := []canonicalEntry{{currentSlot, currentRoot}}
@@ -174,10 +177,22 @@ func updateCanonicalChainInTheDatabase(ctx context.Context, tx kv.RwTx, headSlot
 		return fmt.Errorf("failed to read parent block root: %w", err)
 	}
 	if parentRoot != oldCanonical {
-		log.Debug("cl reorg", "new_head_slot", headSlot, "fork_slot", currentSlot, "old_canonical", oldCanonical, "new_canonical", headRoot)
-		oldStateRoot, err := beacon_indicies.ReadStateRootByBlockRoot(ctx, tx, oldCanonical)
+		oldHeadBlock := oldCanonical
+		oldHeadSlot := oldCanonicalSlot
+		if initialCanonical != (common.Hash{}) {
+			oldHeadBlock = initialCanonical
+			oldHeadSlot = headSlot
+		}
+
+		var depth uint64
+		if oldHeadSlot > currentSlot {
+			depth = oldHeadSlot - currentSlot
+		}
+
+		log.Debug("cl reorg", "new_head_slot", headSlot, "fork_slot", currentSlot, "old_head_block", oldHeadBlock, "new_canonical", headRoot)
+		oldStateRoot, err := beacon_indicies.ReadStateRootByBlockRoot(ctx, tx, oldHeadBlock)
 		if err != nil {
-			log.Warn("failed to read state root by block root", "err", err, "block_root", oldCanonical)
+			log.Warn("failed to read state root by block root", "err", err, "block_root", oldHeadBlock)
 			return nil
 		}
 		newStateRoot, err := beacon_indicies.ReadStateRootByBlockRoot(ctx, tx, headRoot)
@@ -187,8 +202,8 @@ func updateCanonicalChainInTheDatabase(ctx context.Context, tx kv.RwTx, headSlot
 		}
 		reorgEvent := &beaconevents.ChainReorgData{
 			Slot:                headSlot,
-			Depth:               currentSlot - headSlot,
-			OldHeadBlock:        oldCanonical,
+			Depth:               depth,
+			OldHeadBlock:        oldHeadBlock,
 			NewHeadBlock:        headRoot,
 			OldHeadState:        oldStateRoot,
 			NewHeadState:        newStateRoot,
