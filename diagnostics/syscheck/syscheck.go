@@ -58,13 +58,13 @@ func CheckKernelAllocationHints(ctx context.Context, log log.Logger) {
 			logHint(
 				"vm.overcommit_memory=0 can cause allocation failures under load; set to 1",
 				"current", v,
-				"fix", `echo "vm.overcommit_memory = 1" | sudo tee -a /etc/sysctl.d/99-erigon.conf && sudo sysctl -p /etc/sysctl.d/99-erigon.conf`,
+				"fix", `echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.d/99-erigon.conf && sudo sysctl -p /etc/sysctl.d/99-erigon.conf`,
 			)
 		case 2:
 			logHint(
 				"vm.overcommit_memory=2 (strict) may cause allocation failures for large mmap/fork workloads; consider 1",
 				"current", v,
-				"fix", `echo "vm.overcommit_memory = 1" | sudo tee -a /etc/sysctl.d/99-erigon.conf && sudo sysctl -p /etc/sysctl.d/99-erigon.conf`,
+				"fix", `echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.d/99-erigon.conf && sudo sysctl -p /etc/sysctl.d/99-erigon.conf`,
 			)
 		default:
 			log.Info("vm.overcommit_memory looks OK", "current", v)
