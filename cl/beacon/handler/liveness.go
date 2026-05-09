@@ -27,7 +27,6 @@ import (
 	"github.com/erigontech/erigon/cl/cltypes"
 	"github.com/erigontech/erigon/cl/cltypes/solid"
 	state_accessors "github.com/erigontech/erigon/cl/persistence/state"
-	"github.com/erigontech/erigon/common"
 	"github.com/erigontech/erigon/db/kv"
 )
 
@@ -79,7 +78,6 @@ func (a *ApiHandler) liveness(w http.ResponseWriter, r *http.Request) (*beaconht
 	for _, idx := range idxs {
 		liveSet[idx] = &live{Index: int(idx), IsLive: false}
 	}
-	var lastBlockRootProcess common.Hash
 	var lastSlotProcess uint64
 	// we need to obtain the relevant data:
 	// Use the blocks in the epoch as heuristic
@@ -92,14 +90,10 @@ func (a *ApiHandler) liveness(w http.ResponseWriter, r *http.Request) (*beaconht
 			continue
 		}
 		updateLivenessWithBlock(block, liveSet)
-		lastBlockRootProcess, err = block.Block.HashSSZ()
-		if err != nil {
-			return nil, err
-		}
 		lastSlotProcess = block.Block.Slot
 	}
 	// use the epoch participation as an additional heuristic
-	currentEpochParticipation, previousEpochParticipation, err := a.obtainCurrentEpochParticipationFromEpoch(tx, epoch, lastBlockRootProcess, lastSlotProcess)
+	currentEpochParticipation, err := a.obtainCurrentEpochParticipationFromEpoch(tx, epoch, lastSlotProcess)
 	if err != nil {
 		return nil, err
 	}
@@ -113,14 +107,7 @@ func (a *ApiHandler) liveness(w http.ResponseWriter, r *http.Request) (*beaconht
 		if idx >= uint64(currentEpochParticipation.Length()) {
 			continue
 		}
-		if currentEpochParticipation.Get(int(idx)) != 0 {
-			live.IsLive = true
-			continue
-		}
-		if idx >= uint64(previousEpochParticipation.Length()) {
-			continue
-		}
-		live.IsLive = previousEpochParticipation.Get(int(idx)) != 0
+		live.IsLive = currentEpochParticipation.Get(int(idx)) != 0
 	}
 
 	resp := []*live{}
@@ -134,22 +121,18 @@ func (a *ApiHandler) liveness(w http.ResponseWriter, r *http.Request) (*beaconht
 	return newBeaconResponse(resp), nil
 }
 
-func (a *ApiHandler) obtainCurrentEpochParticipationFromEpoch(tx kv.Tx, epoch uint64, blockRoot common.Hash, blockSlot uint64) (*solid.ParticipationBitList, *solid.ParticipationBitList, error) {
-	prevEpoch := epoch
-	if epoch > 0 {
-		prevEpoch--
-	}
+func (a *ApiHandler) obtainCurrentEpochParticipationFromEpoch(tx kv.Tx, epoch uint64, blockSlot uint64) (*solid.ParticipationBitList, error) {
 	snRoTx := a.caplinStateSnapshots.View()
 	defer snRoTx.Close()
 
 	stateGetter := state_accessors.GetValFnTxAndSnapshot(tx, snRoTx)
 
-	currParticipation, ok1 := a.forkchoiceStore.Participation(epoch)
-	prevParticipation, ok2 := a.forkchoiceStore.Participation(prevEpoch)
-	if !ok1 || !ok2 {
-		return a.stateReader.ReadParticipations(tx, stateGetter, blockSlot)
+	currParticipation, ok := a.forkchoiceStore.Participation(epoch)
+	if !ok {
+		currentEpochParticipation, _, err := a.stateReader.ReadParticipations(tx, stateGetter, blockSlot)
+		return currentEpochParticipation, err
 	}
-	return currParticipation, prevParticipation, nil
+	return currParticipation, nil
 
 }
 
