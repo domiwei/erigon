@@ -137,8 +137,7 @@ func (tx *LegacyTx) Unwrap() Transaction {
 }
 
 // NewTransaction creates an unsigned legacy transaction.
-//
-// Deprecated: use NewTx instead.
+// Callers may also construct a LegacyTx struct literal directly.
 func NewTransaction(nonce uint64, to common.Address, amount *uint256.Int, gasLimit uint64, gasPrice *uint256.Int, data []byte) *LegacyTx {
 	tx := &LegacyTx{
 		CommonTx: CommonTx{
@@ -157,9 +156,8 @@ func NewTransaction(nonce uint64, to common.Address, amount *uint256.Int, gasLim
 	return tx
 }
 
-// NewContractCreation creates an unsigned legacy transaction.
-//
-// Deprecated: use NewTx instead.
+// NewContractCreation creates an unsigned contract-creation transaction.
+// Callers may also construct a LegacyTx struct literal directly.
 func NewContractCreation(nonce uint64, amount *uint256.Int, gasLimit uint64, gasPrice *uint256.Int, data []byte) *LegacyTx {
 	tx := &LegacyTx{
 		CommonTx: CommonTx{
