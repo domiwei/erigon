@@ -626,3 +626,20 @@ func TestTraceCallBlockOverridesBaseFeeAffectsGasPrice(t *testing.T) {
 	// effective gas price = BaseFeePerGas(10) + MaxPriorityFeePerGas(2) = 12 = 0xc
 	require.Equal(t, "0x000000000000000000000000000000000000000000000000000000000000000c", result.Output.String())
 }
+
+func TestParseOeTracerConfig_RejectsCustomTracer(t *testing.T) {
+	tracer := "callTracer"
+	_, err := parseOeTracerConfig(&config.TraceConfig{Tracer: &tracer})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "trace_* does not support custom tracers")
+}
+
+func TestParseOeTracerConfig_AcceptsNilTracer(t *testing.T) {
+	cfg, err := parseOeTracerConfig(&config.TraceConfig{})
+	require.NoError(t, err)
+	require.Equal(t, OeTracerConfig{}, cfg)
+
+	cfg, err = parseOeTracerConfig(nil)
+	require.NoError(t, err)
+	require.Equal(t, OeTracerConfig{}, cfg)
+}
