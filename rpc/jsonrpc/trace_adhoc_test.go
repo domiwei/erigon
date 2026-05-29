@@ -50,6 +50,27 @@ import (
 	"github.com/erigontech/erigon/rpc/ethapi"
 )
 
+func TestParseOeTracerConfigRejectsCustomTracer(t *testing.T) {
+	tracer := "callTracer"
+	cfg := &config.TraceConfig{Tracer: &tracer}
+	_, err := parseOeTracerConfig(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "trace_* namespace does not support custom tracers")
+
+	// nil config is fine
+	_, err = parseOeTracerConfig(nil)
+	require.NoError(t, err)
+
+	// config without Tracer is fine
+	_, err = parseOeTracerConfig(&config.TraceConfig{})
+	require.NoError(t, err)
+
+	// empty string tracer is fine
+	empty := ""
+	_, err = parseOeTracerConfig(&config.TraceConfig{Tracer: &empty})
+	require.NoError(t, err)
+}
+
 func TestEmptyQuery(t *testing.T) {
 	m, _, _ := rpcdaemontest.CreateTestExecModule(t)
 	api := NewTraceAPI(newBaseApiForTest(m), m.DB, &httpcfg.HttpCfg{})
