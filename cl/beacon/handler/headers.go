@@ -72,6 +72,8 @@ func (a *ApiHandler) getHeaders(w http.ResponseWriter, r *http.Request) (*beacon
 	}
 	// Now we assemble the response
 	anyOptimistic := false
+	allFinalized := true
+	finalizedSlot := a.forkchoiceStore.FinalizedSlot()
 	headers := make([]*headerResponse, 0, len(candidates))
 	for _, root := range candidates {
 		signedHeader, err := a.blockReader.ReadHeaderByRoot(ctx, tx, root)
@@ -86,14 +88,21 @@ func (a *ApiHandler) getHeaders(w http.ResponseWriter, r *http.Request) (*beacon
 		if err != nil {
 			return nil, err
 		}
+		canonical := canonicalRoot == root
 		headers = append(headers, &headerResponse{
 			Root:      root,
-			Canonical: canonicalRoot == root,
+			Canonical: canonical,
 			Header:    signedHeader,
 		})
 		anyOptimistic = anyOptimistic || a.forkchoiceStore.IsRootOptimistic(root)
+		if !canonical || signedHeader.Header.Slot > finalizedSlot {
+			allFinalized = false
+		}
 	}
-	return newBeaconResponse(headers).WithOptimistic(anyOptimistic), nil
+	if len(headers) == 0 {
+		allFinalized = false
+	}
+	return newBeaconResponse(headers).WithFinalized(allFinalized).WithOptimistic(anyOptimistic), nil
 }
 
 func (a *ApiHandler) getHeader(w http.ResponseWriter, r *http.Request) (*beaconhttp.BeaconResponse, error) {
