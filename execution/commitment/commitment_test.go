@@ -1086,3 +1086,29 @@ func TestInitializeTrieAndUpdates_ConcurrentVariantUnchanged(t *testing.T) {
 	require.Equal(t, ModeDirect, upd.Mode())
 	require.Nil(t, upd.parallel)
 }
+
+func TestIsComplete(t *testing.T) {
+	t.Run("nil", func(t *testing.T) {
+		require.False(t, BranchData(nil).IsComplete())
+	})
+	t.Run("empty", func(t *testing.T) {
+		require.False(t, BranchData([]byte{}).IsComplete())
+	})
+	t.Run("too_short", func(t *testing.T) {
+		require.False(t, BranchData([]byte{0, 0}).IsComplete())
+	})
+	t.Run("complete", func(t *testing.T) {
+		// touchMap=0xFFFF, afterMap=0xFFFF → ^0xFFFF & 0xFFFF == 0 → complete
+		bd := make(BranchData, 4)
+		binary.BigEndian.PutUint16(bd[0:], 0xFFFF)
+		binary.BigEndian.PutUint16(bd[2:], 0xFFFF)
+		require.True(t, bd.IsComplete())
+	})
+	t.Run("incomplete", func(t *testing.T) {
+		// touchMap=0x0000, afterMap=0xFFFF → ^0x0000 & 0xFFFF == 0xFFFF != 0 → incomplete
+		bd := make(BranchData, 4)
+		binary.BigEndian.PutUint16(bd[0:], 0x0000)
+		binary.BigEndian.PutUint16(bd[2:], 0xFFFF)
+		require.False(t, bd.IsComplete())
+	})
+}
