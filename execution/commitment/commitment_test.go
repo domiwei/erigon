@@ -504,6 +504,26 @@ func TestBranchData_ChildCount(t *testing.T) {
 	require.Equal(t, 3, buf.ChildCount())
 }
 
+func TestBranchData_IsComplete_ShortData(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, BranchData(nil).IsComplete(), "nil must not panic")
+	require.False(t, BranchData{}.IsComplete(), "empty must not panic")
+	require.False(t, BranchData{0x00}.IsComplete(), "1-byte must not panic")
+	require.False(t, BranchData{0x00, 0x01, 0x02}.IsComplete(), "3-byte must not panic")
+
+	// 4-byte complete branch: touchMap == afterMap → ^touch & after == 0.
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint16(buf[0:], 0x0007)
+	binary.BigEndian.PutUint16(buf[2:], 0x0007)
+	require.True(t, BranchData(buf).IsComplete())
+
+	// 4-byte incomplete branch: afterMap has bits not in touchMap.
+	binary.BigEndian.PutUint16(buf[0:], 0x0003)
+	binary.BigEndian.PutUint16(buf[2:], 0x0007)
+	require.False(t, BranchData(buf).IsComplete())
+}
+
 func TestBranchData_MergeHexBranchesEmptyBranches(t *testing.T) {
 	t.Parallel()
 
