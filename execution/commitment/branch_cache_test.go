@@ -153,7 +153,7 @@ func TestBranchCache_Stats(t *testing.T) {
 // (lazily, on the next Get) every superseded-epoch entry whose txN is at or
 // above the unwind floor, while entries below the floor survive untouched.
 func TestBranchCache_Unwind_DropsStaleAboveFloorLazily(t *testing.T) {
-	c := NewBranchCache(100)
+	c := NewBranchCache(512)
 
 	rootKey := []byte{0x00}
 	tailKeyKeep := []byte{0xa0, 0xb0}
@@ -198,7 +198,7 @@ func TestBranchCache_Unwind_AcrossAllTiers(t *testing.T) {
 // entry stamped exactly at the unwind floor belongs to a rolled-back block and
 // drops; an entry one txN below the floor survives.
 func TestBranchCache_Unwind_FloorBoundary(t *testing.T) {
-	c := NewBranchCache(100)
+	c := NewBranchCache(512)
 
 	belowKey := []byte{0xa0, 0xb0}
 	atKey := []byte{0xa0, 0xb1}
