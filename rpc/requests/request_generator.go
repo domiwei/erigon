@@ -255,8 +255,6 @@ func retry(ctx context.Context, op func(context.Context) error, isRecoverableErr
 		if lastErr != nil {
 			return lastErr
 		}
-
-		err = nil
 	}
 
 	delayTimer := time.NewTimer(delay)
