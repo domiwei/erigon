@@ -1063,3 +1063,10 @@ func TestInitializeTrieAndUpdates_HexVariantUnchanged(t *testing.T) {
 	require.Equal(t, ModeDirect, upd.Mode())
 	require.Nil(t, upd.parallel)
 }
+
+func TestBranchData_IsComplete_EmptyData(t *testing.T) {
+	require.False(t, BranchData(nil).IsComplete())
+	require.False(t, BranchData([]byte{}).IsComplete())
+	require.False(t, BranchData([]byte{0x00}).IsComplete())
+	require.False(t, BranchData([]byte{0x00, 0x01, 0x02}).IsComplete())
+}
