@@ -41,7 +41,7 @@ func NewExecutionRequests(cfg *clparams.BeaconChainConfig) *ExecutionRequests {
 }
 
 func (e *ExecutionRequests) EncodingSizeSSZ() int {
-	return e.Deposits.EncodingSizeSSZ() + e.Withdrawals.EncodingSizeSSZ() + e.Consolidations.EncodingSizeSSZ()
+	return 4*3 + e.Deposits.EncodingSizeSSZ() + e.Withdrawals.EncodingSizeSSZ() + e.Consolidations.EncodingSizeSSZ()
 }
 
 func (e *ExecutionRequests) EncodeSSZ(buf []byte) ([]byte, error) {
