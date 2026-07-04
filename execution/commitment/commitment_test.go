@@ -438,6 +438,23 @@ func TestBranchData_MergeHexBranches2(t *testing.T) {
 	}
 }
 
+func TestBranchData_IsComplete(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, BranchData(nil).IsComplete(), "nil branch data")
+	require.False(t, BranchData{}.IsComplete(), "empty branch data")
+	require.False(t, BranchData{0x00}.IsComplete(), "1-byte branch data")
+	require.False(t, BranchData{0x00, 0x00, 0x00}.IsComplete(), "3-byte branch data")
+
+	// 4 bytes: touchMap=0xFFFF, afterMap=0xFFFF => complete (^0xFFFF & 0xFFFF == 0)
+	complete := BranchData{0xFF, 0xFF, 0xFF, 0xFF}
+	require.True(t, complete.IsComplete())
+
+	// 4 bytes: touchMap=0x0000, afterMap=0x0001 => incomplete (^0x0000 & 0x0001 != 0)
+	incomplete := BranchData{0x00, 0x00, 0x00, 0x01}
+	require.False(t, incomplete.IsComplete())
+}
+
 func TestBranchData_ChildCount(t *testing.T) {
 	t.Parallel()
 
