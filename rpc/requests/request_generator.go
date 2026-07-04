@@ -251,12 +251,8 @@ func retry(ctx context.Context, op func(context.Context) error, isRecoverableErr
 		return err
 	}
 
-	if errors.Is(err, context.DeadlineExceeded) {
-		if lastErr != nil {
-			return lastErr
-		}
-
-		err = nil
+	if errors.Is(err, context.DeadlineExceeded) && lastErr != nil {
+		return lastErr
 	}
 
 	delayTimer := time.NewTimer(delay)
