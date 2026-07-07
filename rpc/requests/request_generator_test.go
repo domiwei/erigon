@@ -17,7 +17,9 @@
 package requests
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -85,4 +87,17 @@ func TestParseResponse(t *testing.T) {
 		got, _ := parseResponse(testCase.input)
 		require.Equal(t, testCase.expected, got)
 	}
+}
+
+func TestRetryReturnsErrorWhenDeadlineExhausted(t *testing.T) {
+	alwaysTimeout := func(ctx context.Context) error {
+		return context.DeadlineExceeded
+	}
+	alwaysRecoverable := func(error) bool { return true }
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	err := retry(ctx, alwaysTimeout, alwaysRecoverable, 10*time.Millisecond, nil)
+	require.Error(t, err, "retry must return a non-nil error when the deadline is exhausted")
 }

@@ -265,7 +265,10 @@ func retry(ctx context.Context, op func(context.Context) error, isRecoverableErr
 		return retry(ctx, op, isRecoverableError, delay, err)
 	case <-ctx.Done():
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return err
+			if err != nil {
+				return err
+			}
+			return ctx.Err()
 		}
 		return ctx.Err()
 	}
