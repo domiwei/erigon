@@ -245,8 +245,12 @@ func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 }
 
 // Flush switches to streaming gzip on first call; subsequent calls flush incrementally.
+// No-op when nothing has been written yet and the gzip writer is uninitialized.
 func (w *gzipResponseWriter) Flush() {
 	if w.gzw == nil {
+		if w.buf.Len() == 0 {
+			return
+		}
 		w.ResponseWriter.Header().Set("Content-Encoding", "gzip")
 		w.ResponseWriter.Header().Del("Content-Length")
 		if w.status != 0 {
@@ -254,10 +258,8 @@ func (w *gzipResponseWriter) Flush() {
 		}
 		w.gzw = gzPool.Get().(*gzip.Writer)
 		w.gzw.Reset(w.ResponseWriter)
-		if w.buf.Len() > 0 {
-			_, _ = w.gzw.Write(w.buf.Bytes())
-			w.buf.Reset()
-		}
+		_, _ = w.gzw.Write(w.buf.Bytes())
+		w.buf.Reset()
 	}
 	_ = w.gzw.Flush()
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {

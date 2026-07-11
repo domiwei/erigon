@@ -99,8 +99,8 @@ func TestGzipHandlerNoAcceptEncoding(t *testing.T) {
 	assert.Equal(t, body, rec.Body.Bytes())
 }
 
-// TestGzipHandlerStreaming verifies that a handler that calls Flush() activates
-// stdlib gzip streaming and the full response decompresses correctly.
+// TestGzipHandlerStreaming verifies that a handler that writes then calls Flush()
+// activates stdlib gzip streaming and the full response decompresses correctly.
 func TestGzipHandlerStreaming(t *testing.T) {
 	parts := [][]byte{
 		[]byte(`{"jsonrpc":"2.0","result":`),
@@ -108,8 +108,9 @@ func TestGzipHandlerStreaming(t *testing.T) {
 		[]byte(`}`),
 	}
 	handler := newGzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(parts[0])
 		w.(http.Flusher).Flush() // activates streaming mode
-		for _, p := range parts {
+		for _, p := range parts[1:] {
 			_, _ = w.Write(p)
 		}
 	}))
@@ -143,8 +144,8 @@ func TestGzipHandlerStatusBuffered(t *testing.T) {
 func TestGzipHandlerStatusStreaming(t *testing.T) {
 	handler := newGzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
-		w.(http.Flusher).Flush()
 		_, _ = w.Write([]byte(`ok`))
+		w.(http.Flusher).Flush()
 	}))
 
 	rec := gzipRequest(t, handler)
@@ -166,6 +167,20 @@ func TestGzipHandlerLargeBody(t *testing.T) {
 
 	assert.Equal(t, "gzip", rec.Header().Get("Content-Encoding"))
 	assert.Equal(t, body, decompressGzip(t, rec.Body))
+}
+
+// TestGzipResponseWriterFlushBeforeWrite verifies that calling Flush on a
+// gzipResponseWriter before any Write does not panic.
+func TestGzipResponseWriterFlushBeforeWrite(t *testing.T) {
+	rec := httptest.NewRecorder()
+	buf := &bytes.Buffer{}
+	grw := &gzipResponseWriter{buf: buf, ResponseWriter: rec}
+
+	require.Nil(t, grw.gzw, "gzw must be nil before first Flush")
+	require.NotPanics(t, func() { grw.Flush() }, "Flush before Write must not panic")
+
+	// gzw should remain nil: nothing was written, so there is nothing to flush.
+	assert.Nil(t, grw.gzw, "gzw must stay nil when Flush is called with empty buffer")
 }
 
 // TestGzipResponseWriterFlushActivatesStreaming is a unit test on
