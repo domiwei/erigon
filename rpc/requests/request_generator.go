@@ -266,6 +266,11 @@ func retryConnects(ctx context.Context, op func(context.Context) error) error {
 	if lastDialErr != nil && err == context.DeadlineExceeded {
 		return lastDialErr
 	}
+	if err == nil {
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
+		}
+	}
 	return err
 }
 

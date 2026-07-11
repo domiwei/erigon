@@ -104,6 +104,15 @@ func TestRetryConnectsParentDeadlineAfterOnlyTimeoutsReturnsDeadlineExceeded(t *
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
+func TestRetryConnectsExpiredContextNotMaskedBySuccessfulOp(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // already expired
+	var attempts atomic.Int64
+	err := retryConnects(ctx, sequenceOp(&attempts, nil))
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestRetryConnectsPermanentErrorWrappingDeadlineExceededNotSwallowed(t *testing.T) {
 	t.Parallel()
 	readErr := &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset")}
