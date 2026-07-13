@@ -17,15 +17,21 @@
 package rpc
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"reflect"
 	"testing"
+	"time"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/erigontech/erigon/common/log/v3"
 	"github.com/erigontech/erigon/rpc/jsonstream"
 )
 
@@ -137,6 +143,39 @@ func TestHandlerDoesNotDoubleWriteNull(t *testing.T) {
 		})
 	}
 
+}
+
+func TestHandleBatchMixedWithResponseMessage(t *testing.T) {
+	logger := log.New()
+	server := newTestServer(logger)
+	defer server.Stop()
+
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	go server.ServeCodec(NewCodec(serverConn), 0)
+
+	batch := `[{"jsonrpc":"2.0","id":1,"method":"test_echo","params":["hello",10,{}]},` +
+		`{"jsonrpc":"2.0","id":99,"result":"stale"}]` + "\n"
+
+	clientConn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if _, err := io.WriteString(clientConn, batch); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	clientConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	reader := bufio.NewReader(clientConn)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read: %v (deadlock if timeout)", err)
+	}
+
+	var msgs []json.RawMessage
+	if err := json.Unmarshal([]byte(line), &msgs); err != nil {
+		t.Fatalf("unmarshal batch response: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 response in batch, got %d", len(msgs))
+	}
 }
 
 // TestRunMethodFlushHookNilFunc pins the invariant that runMethod must not panic when the

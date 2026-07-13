@@ -207,7 +207,7 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 		boundedConcurrency := make(chan struct{}, h.maxBatchConcurrency)
 		defer close(boundedConcurrency)
 		wg := sync.WaitGroup{}
-		wg.Add(len(msgs))
+		wg.Add(len(calls))
 		for i := range calls {
 			boundedConcurrency <- struct{}{}
 			go func(i int) {
