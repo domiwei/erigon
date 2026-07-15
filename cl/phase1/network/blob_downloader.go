@@ -239,7 +239,7 @@ func (b *BlobHistoryDownloader) downloadOnce(shouldLog bool) error {
 	}
 
 	for currentSlot >= targetSlot {
-		if currentSlot <= b.sn.FrozenBlobs() {
+		if blobSlotFrozen(currentSlot, b.sn.FrozenBlobs()) {
 			break
 		}
 		if !b.syncedChecker.Synced() {
@@ -301,6 +301,10 @@ func (b *BlobHistoryDownloader) downloadOnce(shouldLog bool) error {
 	}
 
 	return nil
+}
+
+func blobSlotFrozen(slot, frozenBlobs uint64) bool {
+	return slot < frozenBlobs
 }
 
 // collectIncompleteBlocks scans backwards from currentSlot for Deneb+ blocks still

@@ -34,6 +34,26 @@ type staticPeerDasGetter struct{ pd das.PeerDas }
 
 func (s staticPeerDasGetter) GetPeerDas() das.PeerDas { return s.pd }
 
+func TestBlobSlotFrozenBoundary(t *testing.T) {
+	const frozenBlobs = uint64(100)
+
+	tests := []struct {
+		name string
+		slot uint64
+		want bool
+	}{
+		{name: "below boundary is frozen", slot: frozenBlobs - 1, want: true},
+		{name: "boundary is not frozen", slot: frozenBlobs, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := blobSlotFrozen(tt.slot, frozenBlobs); got != tt.want {
+				t.Fatalf("blobSlotFrozen(%d, %d) = %t, want %t", tt.slot, frozenBlobs, got, tt.want)
+			}
+		})
+	}
+}
+
 // A historical fulu block whose PeerDAS data columns are served by no peer (older
 // than the network custody window) makes DownloadColumnsAndRecoverBlobs block until
 // its context is cancelled. Column recovery must be bounded per block so the archive
