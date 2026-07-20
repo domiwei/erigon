@@ -1508,6 +1508,13 @@ func (a *ApiHandler) publishBlindedBlocks(w http.ResponseWriter, r *http.Request
 	}
 
 	if signedBlindedBlock.Version().AfterOrEqual(clparams.FuluVersion) {
+		// Builder API v2: the relay publishes the full block and returns no
+		// payload content; blockPayload is nil on a successful submission.
+		if blockPayload == nil {
+			log.Info("Successfully submitted blinded block (v2, no payload returned)", "slot", signedBlindedBlock.Block.Slot, "api_version", apiVersion)
+			return newBeaconResponse(nil), nil
+		}
+
 		requestsList := cltypes.GetExecutionRequestsList(a.beaconChainCfg, executionRequests)
 		requestsHash := cltypes.ComputeExecutionRequestHash(requestsList)
 		header, err := blockPayload.RlpHeader(&signedBlindedBlock.Block.ParentRoot, requestsHash)
