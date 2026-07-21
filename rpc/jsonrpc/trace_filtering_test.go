@@ -430,6 +430,31 @@ func TestReplayBlockTransactionsMultiWithdrawalNewAddress(t *testing.T) {
 	require.Equal(t, expectedWei, finalBal.ToInt(), "collapsed new-address withdrawal balance mismatch")
 }
 
+// TestCallTransactionNilTxnReturnsError verifies that callTransaction returns
+// an error instead of panicking when TxnByIdxInBlock returns nil.
+func TestCallTransactionNilTxnReturnsError(t *testing.T) {
+	m, _, _ := rpcdaemontest.CreateTestExecModule(t)
+	api := NewTraceAPI(newBaseApiForTest(m), m.DB, &httpcfg.HttpCfg{})
+	ctx := context.Background()
+
+	tx, err := m.DB.BeginTemporalRo(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback()
+
+	cfg, err := api.chainConfig(ctx, tx)
+	require.NoError(t, err)
+
+	header, err := api.headerByNumber(ctx, rpc.BlockNumber(1), tx)
+	require.NoError(t, err)
+	require.NotNil(t, header)
+
+	// txIndex 9999 is far beyond the actual transaction count, so
+	// TxnByIdxInBlock returns nil, nil.
+	_, err = api.callTransaction(ctx, tx, header, []string{TraceTypeTrace}, 9999, false, cfg, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found in block")
+}
+
 // TestReplayBlockTransactionsWithdrawalNoEntriesWithoutFlag verifies that
 // trace_replayBlockTransactions does not emit a synthetic withdrawal entry
 // by default (IncludeWithdrawals not set).
